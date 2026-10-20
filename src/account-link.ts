@@ -49,7 +49,7 @@ async function finish(db:any,a:any,n:string,t:string){
 }
 export async function auth(req:Request,db:any){
  if(!db)return h("<p>Database unavailable.</p>",503);
- const origin=req.headers.get("origin");if(origin&&origin!==new URL(req.url).origin)return h("<p>Invalid origin.</p>",403);
+ const origin=req.headers.get("origin");if(origin&&origin!==new URL(req.url).origin&&origin!=="https://clarity-api-live-production.up.railway.app")return h("<p>Invalid origin.</p>",403);
  let b:URLSearchParams;try{const raw=await req.text();if(raw.length>4096)return h("<p>Request too large.</p>",413);b=new URLSearchParams(raw)}catch{return h("<p>Invalid request.</p>",400)}
  const n=b.get("nonce"),t=b.get("time");if(!validRingLink(n,t))return h("<p>Link expired.</p>",400);
  const email=(b.get("email")||"").trim().toLowerCase(),password=b.get("password")||"",mode=b.get("mode");
