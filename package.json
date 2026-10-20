@@ -1,0 +1,12 @@
+{
+  "name": "clarity-ring-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/index.ts"
+  },
+  "dependencies": {
+    "postgres": "^3.4.7"
+  }
+}
