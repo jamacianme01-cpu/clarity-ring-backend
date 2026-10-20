@@ -32,7 +32,11 @@ const tokens=await exchange.json();if(!tokens.access_token||!tokens.refresh_toke
 const keyBytes=Uint8Array.from(Bun.env.RING_TOKEN_ENCRYPTION_KEY.match(/.{2}/g)||[],x=>parseInt(x,16));if(keyBytes.length!==32)throw Error("Invalid encryption key");
 const aes=await crypto.subtle.importKey("raw",keyBytes,"AES-GCM",false,["encrypt"]);
 async function seal(value:string){const iv=crypto.getRandomValues(new Uint8Array(12));const ciphertext=new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM",iv},aes,new TextEncoder().encode(value)));return Array.from(iv,x=>x.toString(16).padStart(2,"0")).join("")+":"+Array.from(ciphertext,x=>x.toString(16).padStart(2,"0")).join("")}
-const ringAccountId=typeof tokens.account_id==="string"?tokens.account_id:typeof tokens.ring_account_id==="string"?tokens.ring_account_id:null;
+const profile=await fetch("https://api.amazonvision.com/v1/users/me",{headers:{"authorization":"Bearer "+tokens.access_token},signal:AbortSignal.timeout(12000)});
+if(!profile.ok)return response({error:"Ring user profile lookup failed",ringStatus:profile.status},502);
+const profileJson=await profile.json();
+const ringAccountId=typeof profileJson?.data?.id==="string"?profileJson.data.id:null;
+if(!ringAccountId)return response({error:"Ring account ID unavailable"},502);
 const id=crypto.randomUUID();const access=await seal(tokens.access_token),refresh=await seal(tokens.refresh_token);const expiry=new Date(Date.now()+Math.max(60,Number(tokens.expires_in)||14400)*1000);
 await db`INSERT INTO clarity_ring_tokens(id,access_cipher,refresh_cipher,expires_at,ring_account_id) VALUES(${id},${access},${refresh},${expiry},${ringAccountId})`;
 return response({received:true,stored:true,accountLinked:false},202);
