@@ -1,4 +1,4 @@
-import {link,auth} from "./account-link";
+import {link,auth,accountStatus} from "./account-link";
 import {validRingLink} from "./ring-link";
 import postgres from "postgres";
 const db = Bun.env.DATABASE_URL ? postgres(Bun.env.DATABASE_URL,{max:2}) : null;
@@ -13,7 +13,7 @@ if(req.method==="GET"&&url.pathname==="/api/ring/events"){if(!secret||req.header
 if(req.method==="GET"&&url.pathname==="/api/sweeper/status"){if(!secret||req.headers.get("x-clarity-api-key")!==secret)return response({error:"Unauthorized"},401);return response({hardwareConnected:false,ringConnected:false});}
 if(req.method==="POST"&&url.pathname==="/api/sweeper/observations"){if(!secret||req.headers.get("x-clarity-api-key")!==secret)return response({error:"Unauthorized"},401);try{const e=await req.json();if(!e||typeof e.type!=="string")return response({error:"Missing type"},400);if(!db)return response({error:"Database unavailable"},503);await db`CREATE TABLE IF NOT EXISTS clarity_observations(id uuid primary key,event_type text not null,body jsonb not null,created_at timestamptz default now())`;const id=crypto.randomUUID();await db`INSERT INTO clarity_observations(id,event_type,body) VALUES(${id},${e.type},${JSON.stringify(e)}::jsonb)`;return response({accepted:true,persisted:true,id},201);}catch{return response({error:"Unable to save observation"},503);}}
 
-if(req.method==="GET"&&url.pathname==="/ring/account"){return response({linked:false,reason:"Account authorization is required before Ring can be activated"},409);}
+if(req.method==="GET"&&url.pathname==="/ring/account")return accountStatus(req,db);
 if(req.method==="GET"&&url.pathname==="/ring/link")return link(req,url,db);
 if(req.method==="POST"&&url.pathname==="/ring/auth")return auth(req,db);
 if(req.method==="GET"&&url.pathname==="/ring/ready")return response({credentials:!!(Bun.env.RING_CLIENT_ID&&Bun.env.RING_CLIENT_SECRET&&Bun.env.RING_HMAC_KEY),accountLinking:true,tokenStorage:!!(db&&Bun.env.RING_TOKEN_ENCRYPTION_KEY)});
