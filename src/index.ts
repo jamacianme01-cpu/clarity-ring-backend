@@ -1,3 +1,4 @@
+import {validRingLink} from "./ring-link";
 import postgres from "postgres";
 const db = Bun.env.DATABASE_URL ? postgres(Bun.env.DATABASE_URL,{max:2}) : null;
 const response=(body:unknown,status=200)=>Response.json(body,{status,headers:{"cache-control":"no-store"}});
@@ -14,8 +15,7 @@ if(req.method==="POST"&&url.pathname==="/api/sweeper/observations"){if(!secret||
 if(req.method==="GET"&&url.pathname==="/ring/account"){return response({linked:false,reason:"Account authorization is required before Ring can be activated"},409);}
 if(req.method==="GET"&&url.pathname==="/ring/link"){
 const nonce=url.searchParams.get("nonce"),time=url.searchParams.get("time");
-if(!nonce||!time||!/^[A-Za-z0-9_-]{32,128}$/.test(nonce)||!/^[0-9]{13}$/.test(time))return response({error:"Invalid Ring link request"},400);
-const delta=Date.now()-Number(time);if(delta<0||delta>600000)return response({error:"Ring link expired or invalid timestamp"},400);
+if(!validRingLink(nonce,time))return response({error:"Ring link expired or invalid"},400);
 const html='<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CLARITY — Ring Linking</title><main style="font:18px system-ui;max-width:34rem;margin:4rem auto;padding:1rem"><h1>CLARITY</h1><p>Ring linking requires an authenticated CLARITY account. Account sign-in is being configured; your Ring devices are not yet connected.</p></main></html>';
 return new Response(html,{status:503,headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store","referrer-policy":"no-referrer","content-security-policy":"default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'"}});
 }
