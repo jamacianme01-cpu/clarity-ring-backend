@@ -24,14 +24,23 @@ export async function link(req:Request,url:URL,db:any){
  try{await setup(db);const a=await signedIn(req,db);if(!a)return form(n!,t!);return await finish(db,a,n!,t!)}catch{return h("<p>Linking unavailable. Please retry.</p>",503)}
 }
 async function finish(db:any,a:any,n:string,t:string){
- const rows=await db.unsafe("SELECT id,ring_account_id,access_cipher,expires_at FROM clarity_ring_tokens WHERE clarity_account_id IS NULL AND ring_account_id IS NOT NULL ORDER BY created_at DESC LIMIT 100");
+ const rows=await db.unsafe("SELECT id,ring_account_id,access_cipher,refresh_cipher,expires_at FROM clarity_ring_tokens WHERE clarity_account_id IS NULL AND ring_account_id IS NOT NULL ORDER BY created_at DESC LIMIT 100");
  let match:any=null;
  for(const r of rows){if(constantTimeEqual(await matchRingNonce(t,r.ring_account_id,Bun.env.RING_HMAC_KEY||""),n))match=r}
  if(!match)return h("<p>No matching Ring authorization. Restart from Ring.</p>",409);
- if(new Date(match.expires_at).getTime()<Date.now()+60000)return h("<p>Ring authorization expired. Restart from Ring.</p>",409);
- const key=await crypto.subtle.importKey("raw",bytes(Bun.env.RING_TOKEN_ENCRYPTION_KEY||""),"AES-GCM",false,["decrypt"]);
- const [iv,cipher]=String(match.access_cipher).split(":");
- const access=new TextDecoder().decode(await crypto.subtle.decrypt({name:"AES-GCM",iv:bytes(iv)},key,bytes(cipher)));
+ const key=await crypto.subtle.importKey("raw",bytes(Bun.env.RING_TOKEN_ENCRYPTION_KEY||""),"AES-GCM",false,["decrypt","encrypt"]);
+ const open=async(value:string)=>{const [iv,cipher]=value.split(":");return new TextDecoder().decode(await crypto.subtle.decrypt({name:"AES-GCM",iv:bytes(iv)},key,bytes(cipher)))};
+ const seal=async(value:string)=>{const iv=crypto.getRandomValues(new Uint8Array(12));return hex(iv)+":"+hex(new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM",iv},key,e.encode(value))))};
+ let access=await open(match.access_cipher);
+ if(new Date(match.expires_at).getTime()<Date.now()+60000){
+  const refresh=await open(match.refresh_cipher);
+  const resp=await fetch("https://oauth.ring.com/oauth/token",{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded"},body:new URLSearchParams({grant_type:"refresh_token",refresh_token:refresh,client_id:Bun.env.RING_CLIENT_ID||"",client_secret:Bun.env.RING_CLIENT_SECRET||""}),signal:AbortSignal.timeout(12000)});
+  if(!resp.ok)return h("<p>Ring authorization expired. Restart from Ring.</p>",409);
+  const data=await resp.json();if(typeof data.access_token!=="string")return h("<p>Ring refresh failed.</p>",502);
+  access=data.access_token;
+  const nextAccess=await seal(access),nextRefresh=await seal(typeof data.refresh_token==="string"?data.refresh_token:refresh);
+  await db.unsafe("UPDATE clarity_ring_tokens SET access_cipher=$1,refresh_cipher=$2,expires_at=$3 WHERE id=$4",[nextAccess,nextRefresh,new Date(Date.now()+Math.max(60,Number(data.expires_in)||14400)*1000),match.id]);
+ }
  const [local,domain]=String(a.email).split("@"),masked=local[0]+"***"+local.slice(-1)+"@"+domain;
  const result=await claimRingAccount(access,masked,n);
  if(!result.ok)return h("<p>Ring confirmation failed. Restart from Ring.</p>",502);
