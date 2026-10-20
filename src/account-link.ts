@@ -70,3 +70,5 @@ export async function auth(req:Request,db:any){
  return new Response(null,{status:303,headers:{"location":"/ring/link?nonce="+encodeURIComponent(n!)+"&time="+encodeURIComponent(t!),"set-cookie":"clarity_session="+token+"; Secure; HttpOnly; SameSite=Lax; Path=/ring; Max-Age=604800","cache-control":"no-store"}});
  }catch{return form(n!,t!,"Authentication temporarily unavailable.")}
 }
+
+export async function accountStatus(req:Request,db:any){if(!db)return Response.json({linked:false,database:false},{status:503});try{await setup(db);const a=await signedIn(req,db);if(!a)return Response.json({linked:false,authenticated:false},{status:401});const rows=await db.unsafe("SELECT id FROM clarity_ring_tokens WHERE clarity_account_id=$1 AND claimed_at IS NOT NULL LIMIT 1",[String(a.id)]);return Response.json({linked:rows.length>0,authenticated:true},{headers:{"cache-control":"no-store"}})}catch{return Response.json({linked:false,error:"Status unavailable"},{status:503})}}
